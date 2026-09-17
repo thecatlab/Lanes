@@ -6,11 +6,12 @@ Lanes is a local-first pilot for **macOS Tahoe 26 or later**. It uses Swift, Swi
 
 ## Features
 
-- **Focus lanes:** start, pause, resume, and end sessions, with daily totals and saved history.
+- **Focus lanes:** start, pause, resume, and end sessions, with daily totals and saved history. Choose an optional unfinished To-do below Area, or add a task directly to the selected Area before starting Focus.
 - **Areas:** choose a lane from the New Area dropdown independently of your current Focus lane. Set each lane's capacity and move Areas between lanes while retaining their recorded time. A lane containing one Area selects it automatically.
 - **Menu bar status:** an icon while idle, and the current Area or lane during Focus. Long labels scroll within a fixed width; Reduce Motion uses truncation and a tooltip. Closing the popover resets it to the top of the main Focus screen for the next opening.
 - **Focused projects:** optionally display up to five Areas ranked by time spent in the last 30 days.
 - **Curiosity Inbox:** save ideas to revisit after Focus.
+- **To-do:** open the checklist above Curiosity Inbox. Add tasks to Active, Next, or Backlog, or copy an Inbox idea. Drag tasks within or between sections; checking one moves it to Archive, where unchecking restores it. Choose existing Areas for colored badges, and customize colors when adding or editing an Area. The visible limit defaults to 10 tasks and can be changed from the To-do menu; scroll for the rest.
 - **Sandbox budget:** an optional daily total across Sandbox sessions, with an optional notification at the limit.
 - **Local website blocking:** block domains and their subdomains during Focus through a local HTTP/HTTPS proxy.
 - **Session recovery:** pause on screen lock or sleep, and recover interrupted sessions at the last saved checkpoint.
@@ -69,7 +70,7 @@ Choose **Settings → Remove blocking setup…** and approve macOS if requested.
 
 | Location | Contents |
 | --- | --- |
-| `~/Library/Application Support/Lanes/state.json` | Preferences, Areas, sessions, and inbox items |
+| `~/Library/Application Support/Lanes/state.json` | Preferences, Areas, sessions, inbox items, and tasks |
 | `~/Library/Application Support/Lanes/Proxy/` | Helper executable, temporary blocking rules, health status, and original proxy settings backup |
 | `~/Library/LaunchAgents/com.nusaindah.Lanes.Proxy.plist` | Background helper registration |
 
@@ -93,4 +94,6 @@ These files are outside the repository. Focus time comes from sessions you start
     └── build.sh
 ```
 
-This repository contains the app source and build essentials. Generated binaries, design drafts, screenshots, sample-data utilities, and development test runners are not included.
+Run `zsh scripts/test-todo.sh` for the To-do data regression checks (compatible with Command Line Tools without XCTest).
+
+This repository contains the app source, build essentials, and To-do regression checks. Generated binaries, design drafts, screenshots, and sample-data utilities are not included.

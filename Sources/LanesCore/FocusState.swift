@@ -12,6 +12,7 @@ public struct Area: Identifiable, Codable, Equatable {
     public var id: UUID
     public var name: String
     public var lane: Lane?
+    public var badgeColor: String?
     public init(id: UUID = UUID(), name: String, lane: Lane?) { self.id = id; self.name = name; self.lane = lane }
 }
 
@@ -46,6 +47,7 @@ public struct Preferences: Codable {
     public var areaLimits: [String: Int] = [Lane.primary.rawValue: 1]
     public var showProjects = true
     public var projectCount = 5
+    public var todoVisibleRows: Int?
     public var showActiveArea = true
     public var sandboxBudgetEnabled = false
     public var sandboxMinutes = 60
@@ -66,6 +68,14 @@ public struct FocusState: Codable {
     public var areas: [Area] = []
     public var segments: [Segment] = []
     public var ideas: [Idea] = []
+    // Keep the selected task separate from the task list so changing Areas can clear it safely.
+    public var selectedTaskID: UUID?
+    // Optional storage keeps state.json files written before To-do was introduced readable.
+    private var savedTasks: [TodoTask]?
+    public var tasks: [TodoTask] {
+        get { savedTasks ?? [] }
+        set { savedTasks = newValue }
+    }
     public var preferences = Preferences()
     public var session: Session?
     public var selectedLane: Lane = .primary

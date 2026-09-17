@@ -98,6 +98,12 @@ import UserNotifications
     }
     var currentLane: Lane { state.session?.lane ?? state.selectedLane }
     var currentArea: Area? { state.area(state.session != nil ? state.session!.areaID : state.preferredArea(in: state.selectedLane)) }
+    // The selected task is scoped to the current Area; switching Areas never shows a stale task.
+    var currentTask: TodoTask? { state.selectedTask(areaID: currentArea?.id) }
+    func selectTask(_ id: UUID?) {
+        let areaID = currentArea?.id
+        change { try $0.selectTask(id, areaID: areaID) }
+    }
     var today: DateInterval { Calendar.current.dateInterval(of: .day, for: now)! }
     func todayTotal(_ lane: Lane) -> TimeInterval { state.laneTotal(lane, in: today) }
     var sandboxRemaining: TimeInterval { Double(state.preferences.sandboxMinutes * 60) - todayTotal(.sandbox) }

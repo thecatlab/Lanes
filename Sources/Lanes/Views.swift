@@ -2,7 +2,7 @@ import AppKit
 import LanesCore
 import SwiftUI
 
-enum Page: Equatable { case focus, settings, areas, inbox, history, websites, addArea }
+enum Page: Equatable { case focus, todo, settings, areas, inbox, history, websites, addArea, addTask }
 
 struct LanesPanel: View {
     @ObservedObject var store: AppStore
@@ -10,7 +10,10 @@ struct LanesPanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: Page = .focus
     @State private var areaName = ""
+    @State private var areaColor = Color.blue
+    @State private var customAreaColor = false
     @State private var areaLane: Lane = .primary
+    @State private var focusTaskDraft = TodoTask(name: "", areaID: nil, section: .active)
     @State private var ideaText = ""
     @State private var websiteText = ""
     @State private var proposedDomain: String?
@@ -19,31 +22,39 @@ struct LanesPanel: View {
     var dismiss: () -> Void
 
     var body: some View {
-        ScrollView {
-            ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    switch page {
-                    case .focus: focus
-                    case .settings: settings
-                    case .areas: areas
-                    case .inbox: inbox
-                    case .history: history
-                    case .websites: websites
-                    case .addArea: addArea
+        Group {
+            if page == .todo {
+                TodoPage(store: store, maximumHeight: maximumHeight, back: { page = .focus })
+            } else {
+                ScrollView {
+                    ZStack(alignment: .topLeading) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            switch page {
+                            case .todo: EmptyView()
+                            case .focus: focus
+                            case .settings: settings
+                            case .areas: areas
+                            case .inbox: inbox
+                            case .history: history
+                            case .websites: websites
+                            case .addArea: addArea
+                            case .addTask: addFocusTask
+                            }
+                        }
+                        .id(page)
+                        .transition(.opacity)
                     }
+                    .padding(12)
+                    .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: page)
                 }
-                .id(page)
-                .transition(.opacity)
+                .scrollIndicators(.hidden)
             }
-            .padding(12)
-            .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: page)
         }
-        .scrollIndicators(.hidden)
         .frame(width: 310)
         .frame(maxHeight: maximumHeight)
         .fixedSize(horizontal: false, vertical: true)
         .font(.system(size: 13))
-        .controlSize(.small)
+        .controlSize(.regular)
         .onExitCommand { if page == .focus { dismiss() } else { page = .focus } }
         .alert("Lanes", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
@@ -73,7 +84,7 @@ struct LanesPanel: View {
                 rule()
             }
             HStack(spacing: 8) {
-                Text("Area").foregroundStyle(.secondary)
+                Text("Area").foregroundStyle(.secondary).fixedSize().frame(width: 44, alignment: .leading)
                 Menu {
                     if store.state.areas(in: store.currentLane).count != 1 {
                         Button("No Area") { store.selectArea(nil) }
@@ -87,10 +98,33 @@ struct LanesPanel: View {
                         Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium))
                     }
                 }.menuStyle(.borderlessButton).menuIndicator(.hidden).controlSize(.regular).fixedSize(horizontal: false, vertical: true)
+                    .help(store.currentArea?.name ?? "No Area")
                 Spacer(minLength: 2)
-            }.frame(height: 24)
-            Button("Add New Area…") { areaName = ""; areaLane = .primary; editingArea = nil; page = .addArea }
-                .buttonStyle(.link).padding(.leading, 35).padding(.top, 1)
+                Button("Add New Area…") {
+                    areaName = ""; customAreaColor = false; areaLane = .primary; editingArea = nil; page = .addArea
+                }.buttonStyle(.link).fixedSize()
+            }.frame(height: 26)
+            HStack(spacing: 8) {
+                Text("To-do").foregroundStyle(.secondary).fixedSize().frame(width: 44, alignment: .leading)
+                // Only unfinished tasks in the chosen Area are actionable before Focus starts.
+                Menu {
+                    Button("No Task") { store.selectTask(nil) }
+                    ForEach(store.state.focusTasks(areaID: store.currentArea?.id)) { task in
+                        Button(task.name) { store.selectTask(task.id) }
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(store.currentTask?.name ?? "No Task").lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium))
+                    }
+                }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize(horizontal: false, vertical: true)
+                    .help(store.currentTask?.name ?? "Choose a task for this Area")
+                Spacer(minLength: 2)
+                Button("Add New Task…") {
+                    focusTaskDraft = TodoTask(name: "", areaID: store.currentArea?.id, section: .active)
+                    page = .addTask
+                }.buttonStyle(.link).fixedSize()
+            }.frame(height: 26)
 
             if let session = store.state.session {
                 VStack(spacing: 1) {
@@ -123,11 +157,11 @@ struct LanesPanel: View {
                     Spacer(minLength: 0)
                     Button { store.start(store.currentLane) } label: {
                         Text("Start Focus")
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .frame(minWidth: 140)
                     }
                         .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                        .controlSize(.regular)
                     Spacer(minLength: 0)
                 }
             }.frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
@@ -151,12 +185,18 @@ struct LanesPanel: View {
                 ForEach(totals, id: \.area.id) { item in valueRow(item.area.name, TimeText.duration(item.duration)) }
             }
             rule()
+            MenuRow(action: { page = .todo }) {
+                Image(systemName: "checklist").frame(width: 17)
+                Text("To-do")
+                Spacer()
+                CountBadge(count: store.state.tasks.filter { !$0.isArchived }.count, fontSize: 13)
+            }
             MenuRow(action: { page = .inbox }) {
                 Image(systemName: "tray").frame(width: 17)
                 Text("Curiosity Inbox")
                 Spacer()
                 if !store.state.ideas.isEmpty {
-                    Text("\(store.state.ideas.count)").font(.system(size: 12)).padding(.horizontal, 6).padding(.vertical, 1)
+                    Text("\(store.state.ideas.count)").font(.system(size: 13)).padding(.horizontal, 6).padding(.vertical, 1)
                         .background(.primary.opacity(0.07), in: Capsule())
                 }
             }
@@ -236,8 +276,8 @@ struct LanesPanel: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(area.name).lineLimit(2); Spacer()
-                        Button { editingArea = area.id; areaName = area.name; page = .addArea } label: { Image(systemName: "pencil") }
-                            .buttonStyle(.plain).help("Rename Area")
+                        Button { editingArea = area.id; areaName = area.name; customAreaColor = area.badgeColor != nil; areaColor = AreaBadge.color(for: area); page = .addArea } label: { Image(systemName: "pencil") }
+                            .buttonStyle(.plain).help("Edit Area")
                     }
                     HStack {
                         Text("Lane").foregroundStyle(.secondary); Spacer()
@@ -250,13 +290,13 @@ struct LanesPanel: View {
                 }.padding(.vertical, 7)
                 Divider()
             }
-            Button("Add New Area…") { editingArea = nil; areaName = ""; areaLane = .primary; page = .addArea }.buttonStyle(.link).padding(.top, 10)
+            Button("Add New Area…") { editingArea = nil; areaName = ""; customAreaColor = false; areaLane = .primary; page = .addArea }.buttonStyle(.link).padding(.top, 10)
             Text("Moving an Area keeps its time history.").font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 8)
         }
     }
     private var addArea: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header(editingArea == nil ? "Add New Area" : "Rename Area", back: .areas)
+            header(editingArea == nil ? "Add New Area" : "Edit Area", back: .areas)
             TextField("Area name", text: $areaName).textFieldStyle(.roundedBorder).onSubmit(saveArea)
             if editingArea == nil {
                 HStack {
@@ -271,6 +311,8 @@ struct LanesPanel: View {
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
+            Toggle("Custom badge color", isOn: $customAreaColor)
+            if customAreaColor { ColorPicker("Badge color", selection: $areaColor, supportsOpacity: false) }
             HStack {
                 Button("Cancel") { page = .focus }
                 Button("Save Area", action: saveArea).buttonStyle(.borderedProminent).disabled(areaName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -280,10 +322,24 @@ struct LanesPanel: View {
     private func saveArea() {
         let lane = areaLane
         let saved = store.change {
-            if let id = editingArea { try $0.renameArea(id, name: areaName) }
-            else { _ = try $0.addArea(name: areaName, lane: lane) }
+            let id: UUID
+            if let editingArea { id = editingArea; try $0.renameArea(id, name: areaName) }
+            else { id = try $0.addArea(name: areaName, lane: lane) }
+            if let index = $0.areas.firstIndex(where: { $0.id == id }) {
+                $0.areas[index].badgeColor = customAreaColor ? AreaBadge.hex(areaColor) : nil
+            }
         }
         if saved { areaName = ""; page = .focus }
+    }
+
+    private var addFocusTask: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header("Add New Task")
+            TodoEditor(store: store, task: focusTaskDraft, isNew: true, locksArea: true, onSave: { id in
+                store.selectTask(id)
+            }) { page = .focus }
+                .id(focusTaskDraft.id)
+        }
     }
 
     private var inbox: some View {
