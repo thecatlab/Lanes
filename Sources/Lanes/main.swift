@@ -5,7 +5,7 @@ import SwiftUI
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private var statusContent: StatusContent!
-    private let popover = NSPopover()
+    private var popover = NSPopover()
     private var store: AppStore!
     private var subscription: AnyCancellable?
 
@@ -23,12 +23,6 @@ import SwiftUI
         button.addSubview(statusContent)
         button.setAccessibilityLabel("Lanes")
 
-        popover.behavior = .transient
-        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        popover.delegate = self
-        let controller = NSHostingController(rootView: LanesPanel(store: store, popoverID: ObjectIdentifier(popover)) { [weak self] in self?.popover.performClose(nil) })
-        controller.sizingOptions = .preferredContentSize
-        popover.contentViewController = controller
         subscription = store.$state.receive(on: RunLoop.main).sink { [weak self] _ in self?.updateStatus() }
         updateStatus()
         if CommandLine.arguments.contains("--show") {
@@ -53,7 +47,15 @@ import SwiftUI
         let working = store.state.session != nil
         let font = NSFont.menuBarFont(ofSize: 13)
         let width = text.map { min(220, ($0 as NSString).size(withAttributes: [.font: font]).width) } ?? 0
-        statusItem.length = text == nil ? 28 : width + 37
+        let length = text == nil ? 28 : width + 37
+        if statusItem.length != length {
+            statusItem.length = length
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.popover.isShown, let button = self.statusItem.button else { return }
+                button.window?.contentView?.layoutSubtreeIfNeeded()
+                self.popover.positioningRect = button.bounds
+            }
+        }
         statusContent.setLabel(text, working: working)
         statusItem.button?.toolTip = text ?? "Lanes — enter Focus Mode"
         statusItem.button?.setAccessibilityLabel(text ?? "Lanes — enter Focus Mode")
@@ -62,10 +64,17 @@ import SwiftUI
         if popover.isShown { popover.performClose(nil); return }
         if let button = statusItem.button {
             NSApp.activate(ignoringOtherApps: true)
-            // Resolve SwiftUI's actual height before AppKit positions the popover.
-            if let controller = popover.contentViewController as? NSHostingController<LanesPanel> {
-                popover.contentSize = controller.sizeThatFits(in: NSSize(width: 310, height: 690))
-            }
+            // A fresh presentation discards cached screen geometry and starts on Focus.
+            popover = NSPopover()
+            popover.behavior = .transient
+            popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            popover.delegate = self
+            let maximumHeight = min(690, (button.window?.screen?.visibleFrame.height ?? 800) - 55)
+            let controller = NSHostingController(rootView: LanesPanel(store: store, maximumHeight: maximumHeight) { [weak self] in self?.popover.performClose(nil) })
+            controller.sizingOptions = .preferredContentSize
+            popover.contentViewController = controller
+            button.window?.contentView?.layoutSubtreeIfNeeded()
+            popover.contentSize = controller.sizeThatFits(in: NSSize(width: 310, height: maximumHeight))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
@@ -76,6 +85,7 @@ import SwiftUI
     }
     func applicationDidResignActive(_ notification: Notification) { popover.performClose(nil) }
     func applicationDidHide(_ notification: Notification) { popover.performClose(nil) }
+    func applicationDidChangeScreenParameters(_ notification: Notification) { popover.performClose(nil) }
     func applicationWillTerminate(_ notification: Notification) { store.end() }
 }
 

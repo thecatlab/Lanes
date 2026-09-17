@@ -6,10 +6,9 @@ enum Page: Equatable { case focus, settings, areas, inbox, history, websites, ad
 
 struct LanesPanel: View {
     @ObservedObject var store: AppStore
-    let popoverID: ObjectIdentifier
+    let maximumHeight: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: Page = .focus
-    @State private var presentationID = UUID()
     @State private var areaName = ""
     @State private var areaLane: Lane = .primary
     @State private var ideaText = ""
@@ -39,23 +38,12 @@ struct LanesPanel: View {
             .padding(12)
             .animation(.easeInOut(duration: reduceMotion ? 0.12 : 0.22), value: page)
         }
-        .id(presentationID)
         .scrollIndicators(.hidden)
         .frame(width: 310)
-        .frame(maxHeight: min(690, (NSScreen.main?.visibleFrame.height ?? 800) - 55))
+        .frame(maxHeight: maximumHeight)
         .fixedSize(horizontal: false, vertical: true)
         .font(.system(size: 13))
         .controlSize(.small)
-        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { notification in
-            guard let closedPopover = notification.object as? NSPopover,
-                  ObjectIdentifier(closedPopover) == popoverID else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                page = .focus
-                presentationID = UUID()
-            }
-        }
         .onExitCommand { if page == .focus { dismiss() } else { page = .focus } }
         .alert("Lanes", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
@@ -123,11 +111,14 @@ struct LanesPanel: View {
                     .foregroundStyle(.secondary).frame(width: 17)
                 Text(store.state.preferences.blockingEnabled ? store.blocker.message : "Website blocking off")
                     .lineLimit(2)
-            }.padding(.vertical, 5)
+                    .multilineTextAlignment(.center)
+            }.frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 5)
             HStack(spacing: 8) {
                 if let session = store.state.session {
                     Button(session.isPaused ? "Resume" : "Pause") { session.isPaused ? store.resume() : store.pause() }
-                    Button("End focus") { store.end() }
+                        .font(.system(size: 13)).controlSize(.regular)
+                    Button("End Focus") { store.end() }
+                        .font(.system(size: 13)).controlSize(.regular)
                 } else {
                     Spacer(minLength: 0)
                     Button { store.start(store.currentLane) } label: {
@@ -139,7 +130,7 @@ struct LanesPanel: View {
                         .controlSize(.large)
                     Spacer(minLength: 0)
                 }
-            }.padding(.top, 4)
+            }.frame(maxWidth: .infinity, alignment: .center).padding(.top, 4)
             if let text = store.recoveryMessage { Text(text).font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 6) }
             rule()
             HStack {
